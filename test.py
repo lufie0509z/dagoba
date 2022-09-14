@@ -3,10 +3,12 @@ from .dagoba import Dagoba
 
 class DbModelTest(TestCase):
     nodes = [{'_id' : 1, 'name' : 'abc'}, {'_id': 2, 'name' : 'xyz'},]
-    edges = [{'_in' : 3, '_out': 2},]
+    edges = [{'_from' : 1, '_to': 2},]
     
     def setUp(self):
         self.db = Dagoba(self.nodes, self.edges)
+        print('Testcase: test init')
+
     
     def assert_item(self, items, **attrs):
         for item in items:
@@ -24,7 +26,7 @@ class DbModelTest(TestCase):
         
     def test_edges(self):
         edges = list(self.db.edges())
-     
+         
         self.assertEqual(1, len(edges))
         self.assert_item(edges, _in = 1, _out = 2)
     

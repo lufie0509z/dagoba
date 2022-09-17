@@ -4,7 +4,7 @@ from unittest import TestCase
 from .dagoba import Dagoba
 from . import fixtures
 
-class EagerQueryTest(TestCase):
+class LazyQueryTest(TestCase):
     def setUp(self):
         self.db = Dagoba(fixtures.nodes, fixtures.edges)
         self.q = self.db.query(eager = True)

@@ -1,3 +1,10 @@
+from cgitb import reset
+from unittest import result
+
+
+def copy_dict(src: dict, *excludes) -> dict:
+    return {k: v for k, v in src.items() if k not in excludes}
+    
 class Dagoba:
     def __init__(self, nodes = None, edges = None):
         self._nodes = []
@@ -18,6 +25,8 @@ class Dagoba:
             pk = self._next_id
             self._next_id += 1
             node['_id'] = pk
+        node['_out'] = []
+        node['_in'] = []
         self._nodes.append(node)
         self._nodes_by_id[pk] = node
         return pk
@@ -25,10 +34,30 @@ class Dagoba:
     def add_edge(self, edge):
         in_id = edge.get('_from', None)
         out_id = edge.get("_to", None)
-        if (in_id not in self._nodes_by_id or out_id not in self._nodes_by_id):
+        # if (in_id not in self._nodes_by_id or out_id not in self._nodes_by_id):
+        #     raise ValueError(f'Invalid edge: edge({in_id}, {out_id}) not exists.')
+        try:
+            from_node = self.node(in_id)
+            to_node = self.node(out_id)
+            forward = copy_dict(edge, '_backward')
+            self._edges.append(forward)
+            from_node['_out'].append(forward)
+            to_node['_in'].append(forward)
+            if '_backward' in edge.keys():
+                backward = copy_dict(edge, '_backward')
+                backward['_type'] = edge['_backward']
+                backward['_from'] = edge['_to']
+                backward['_to'] = edge['_from']
+                self._edges.append(backward)
+                to_node['_out'].append(backward)
+                from_node['_in'].append(backward)
+        except KeyError:
             raise ValueError(f'Invalid edge: edge({in_id}, {out_id}) not exists.')
-        self._edges.append(edge.copy())
-    
+        # self._edges.append(edge.copy())
+
+    # def copy_dict(src : dict, *excludes) -> dict:
+    #     return {k : v for k, v in src.items() if k not in excludes}
+            
     def edges(self):
         return (x.copy() for x in self._edges)
     
@@ -37,15 +66,6 @@ class Dagoba:
     
     def node(self, pk : int):
         return self._nodes_by_id[pk]
-
-    # "get primary_key from node"
-    # def pk(self, node):
-    #     return node['_id']
-    
-#     # def is_edge(edge, side, pk : int, type_ = None):
-#     #     if edge[side] != pk or edge['_type'] != type_:
-#     #         return False
-#     #     return True
 
     @classmethod
     def pk(cls, node):
@@ -68,16 +88,18 @@ class Dagoba:
 
     def outcome(self, pk : int, type_ = None):
         result = []
-        for edge in self.edges():
-            if Dagoba.is_edge(edge, '_from', pk, type_):
-                result.append(self.node(edge.get('_to')))
+        node = self.node(pk)
+        for x in node['_out']:
+            if Dagoba.is_edge(x, '_from', pk, type_):
+                result.append(self.to_node(x))
         return result
     
     def income(self, pk : int, type_ = None):
         result = []
-        for x in self.edges():
+        node = self.node(pk)
+        for x in node['_in']:
             if Dagoba.is_edge(x, '_to', pk, type_):
-                result.append(self.node(x['_from']))
+                result.append(self.from_node(x))
         return result
     
     def query(self, eager = True):
@@ -127,5 +149,46 @@ class EagerQuery:
 class LazyQuery:
     def __init__(self, db):
         self._db = db
+        self._pipeline = []
+    
+    def node(self, pk: int):
+        def func(arg):
+            try:
+                return [self._db.node(pk)]
+            except KeyError:
+                return []
+        self._pipeline.append(func)
+        return self
 
+    def outcome(self, type_=None):
+        def func(arg):
+            for node in arg:
+                pk = node['_id']
+                for target_node in self._db.outcome(pk, type_):
+                    yield target_node
+        self._pipeline.append(func)
+        return self
 
+    def income(self, type_=None):
+        def func(arg):
+            for node in arg:
+                pk = node['_id']
+                for target_node in self._db.income(pk, type_):
+                    yield target_node
+        self._pipeline.append(func)
+        return self
+
+    def unique(self):
+        def func(arg):
+            dic = {Dagoba.pk(x): x for x in arg}
+            for pk in dic.keys():
+                yield dic[pk]
+        self._pipeline.append(func)
+        return self
+
+    def run(self):
+        input_, output_ = None, None
+        for step in self._pipeline:
+            output_ = step(input_)
+            input_ = output_
+        return list(output_)

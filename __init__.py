@@ -1,7 +1,7 @@
 from unicodedata import name
 import unittest
 
-from .test import DbModelTest
+from .test_db_model import DbModelTest
 from .test_primary_key import PrimaryKeyTest
 from .test_eager_query import EagerQueryTest
 from .test_lazy_query import LazyQueryTest

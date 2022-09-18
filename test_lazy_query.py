@@ -7,8 +7,8 @@ from . import fixtures
 class LazyQueryTest(TestCase):
     def setUp(self):
         self.db = Dagoba(fixtures.nodes, fixtures.edges)
-        self.q = self.db.query(eager = True)
-        print('Testcase : test eager query')
+        self.q = self.db.query(eager = False)
+        print('Testcase : test lazy query')
 
     def assert_nodes(self, nodes, pks):
         ids = set([x['_id'] for x in nodes])
@@ -43,3 +43,22 @@ class LazyQueryTest(TestCase):
     def test_toms_sisters_brother(self):
         nodes =self.q.node(3).outcome('sister').outcome('brother').run()
         self.assert_nodes(nodes, [3, 4, 5])
+    
+    def test_take(self):
+        nodes = self.q.node(1).outcome('son').outcome('son').take(1).run()
+        pk = Dagoba.pk(nodes[0])
+        self.assertIn(pk, [3, 4, 5])
+    
+    '''Test access efficiency'''
+    def test_node_visits(self):
+        self.db.reset_visits()
+        eager_query = self.db.query(eager=True)
+        eager_query.node(1).outcome('son').outcome('son').outcome('sister').take(1).run()
+        eager_visits = self.db.get_visits()
+
+        self.db.reset_visits()
+        lazy_query = self.db.query(eager=False)
+        nodes = lazy_query.node(1).outcome('son').outcome('son').outcome('sister').take(1).run()
+        lazy_visits = self.db.get_visits()
+        print(lazy_visits, eager_visits)
+        self.assertTrue(lazy_visits < eager_visits)

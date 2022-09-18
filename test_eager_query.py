@@ -41,5 +41,10 @@ class EagerQueryTest(TestCase):
         self.assertEqual(1, Dagoba.pk(nodes[0]))
 
     def test_toms_sisters_brother(self):
-        nodes =self.q.node(3).outcome('sister').outcome('brother').run()
-        self.assert_nodes(nodes, [3, 4, 5])
+        nodes =self.q.node(3).outcome('sister').outcome('brother').take(1).run()
+        self.assert_nodes(nodes, [3])
+
+    def test_take(self):
+        nodes = self.q.node(1).outcome('son').outcome('son').take(1).run()
+        pk = Dagoba.pk(nodes[0])
+        self.assertIn(pk, [3, 4, 5])

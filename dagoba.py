@@ -1,7 +1,3 @@
-from cgitb import reset
-from unittest import result
-
-
 def copy_dict(src: dict, *excludes) -> dict:
     return {k: v for k, v in src.items() if k not in excludes}
     
@@ -11,6 +7,7 @@ class Dagoba:
         self._edges = []
         self._nodes_by_id = {}
         self._next_id = 1
+        self._node_visits = 0
         for node in (nodes or []):
             self.add_node(node)
         for edge in (edges or []):
@@ -64,7 +61,9 @@ class Dagoba:
     def nodes(self):
         return (x.copy() for x in self._nodes)
     
-    def node(self, pk : int):
+    def node(self, pk : int, visit = False):
+        if visit:
+            self._node_visits += 1
         return self._nodes_by_id[pk]
 
     @classmethod
@@ -81,30 +80,31 @@ class Dagoba:
         return True
 
     def to_node(self, edge):
-        return self.node(edge['_to']) 
+        return self.node(edge['_to'], visit = True) 
     
     def from_node(self, edge):
-        return self.node(edge['_from'])
+        return self.node(edge['_from'], visit = True)
 
     def outcome(self, pk : int, type_ = None):
-        result = []
-        node = self.node(pk)
-        for x in node['_out']:
-            if Dagoba.is_edge(x, '_from', pk, type_):
-                result.append(self.to_node(x))
-        return result
+        node = self.node(pk, visit=True)
+        return (self.to_node(x) for x in node['_out']
+                if Dagoba.is_edge(x, '_from', pk, type_))
+
     
     def income(self, pk : int, type_ = None):
-        result = []
-        node = self.node(pk)
-        for x in node['_in']:
-            if Dagoba.is_edge(x, '_to', pk, type_):
-                result.append(self.from_node(x))
-        return result
+        node = self.node(pk, visit = True)
+        return (self.from_node(x) for x in node['_in']
+                if Dagoba.is_edge(x, '_to', pk, type_))
     
     def query(self, eager = True):
         return EagerQuery(self) if eager else LazyQuery(self)
 
+    def reset_visits(self):
+        self._node_visits = 0
+
+    def get_visits(self) -> int:
+        return self._node_visits
+        
 class EagerQuery:
     def __init__(self, db):
         self._db = db
@@ -143,6 +143,10 @@ class EagerQuery:
             pk = Dagoba.pk(node)
             d.setdefault(pk, node)
         self._result = list(d.values())
+        return self
+        
+    def take(self, count: int):
+        self._result = self._result[:count]
         return self
 
 
@@ -192,3 +196,18 @@ class LazyQuery:
             output_ = step(input_)
             input_ = output_
         return list(output_)
+
+    def take(self, count: int):
+        def func(arg):
+            result = []
+            for i in range(count):
+                result.append(arg[i])
+            return result
+        self._pipeline.append(func)
+        return self
+
+    def take(self, count: int):
+        def func(arg):
+            return [next(arg) for i in range(count)]
+        self._pipeline.append(func)
+        return self

@@ -1,7 +1,7 @@
 from this import s
 from unittest import TestCase
 
-from .dagoba import Dagoba
+from .dagoba import Dagoba, LazyQuery
 from . import fixtures
 
 class LazyQueryTest(TestCase):
@@ -60,5 +60,13 @@ class LazyQueryTest(TestCase):
         lazy_query = self.db.query(eager=False)
         nodes = lazy_query.node(1).outcome('son').outcome('son').outcome('sister').take(1).run()
         lazy_visits = self.db.get_visits()
-        print(lazy_visits, eager_visits)
+        # print(lazy_visits, eager_visits)
         self.assertTrue(lazy_visits < eager_visits)
+
+    def test_custom_query(self):
+        def grandkids(self_):
+            self_.outcome().outcome()
+            return self_
+        LazyQuery.grandkids = grandkids
+        nodes = self.q.node(1).grandkids().run()
+        self.assert_nodes(nodes, [3, 4, 5, 6])
